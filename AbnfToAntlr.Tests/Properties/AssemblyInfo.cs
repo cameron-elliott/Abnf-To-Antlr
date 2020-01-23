@@ -1,6 +1,6 @@
 ﻿/*
 
-    Copyright 2012-2013 Robert Pinchbeck
+    Copyright 2018-2020 Robert Pinchbeck
   
     This file is part of AbnfToAntlr.
 
@@ -31,7 +31,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Robert Pinchbeck")]
 [assembly: AssemblyProduct("AbnfToAntlr")]
-[assembly: AssemblyCopyright("Copyright © 2018")]
+[assembly: AssemblyCopyright("Copyright © 2018-2020")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

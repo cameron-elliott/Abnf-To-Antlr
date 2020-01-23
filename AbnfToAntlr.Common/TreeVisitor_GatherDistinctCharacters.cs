@@ -1,6 +1,6 @@
 ﻿/*
 
-    Copyright 2012-2013 Robert Pinchbeck
+    Copyright 2012-2020 Robert Pinchbeck
   
     This file is part of AbnfToAntlr.
 
@@ -33,16 +33,18 @@ namespace AbnfToAntlr.Common
     {
         IDictionary<char, NamedCharacter> _distinctCharacters;
         INamedCharacterLookup _lookup;
+        RuleStatistics _ruleStatistics;
 
-        public TreeVisitor_GatherDistinctCharacters(IDictionary<char, NamedCharacter> literals, INamedCharacterLookup lookup)
+        public TreeVisitor_GatherDistinctCharacters(IDictionary<char, NamedCharacter> literals, INamedCharacterLookup lookup, RuleStatistics ruleStatistics)
         {
             _distinctCharacters = literals;
             _lookup = lookup;
+            _ruleStatistics = ruleStatistics;
 
-            CommonConstructor();
+            Reset();
         }
 
-        protected void CommonConstructor()
+        protected void Reset()
         {
             _distinctCharacters.Clear();
         }
@@ -50,7 +52,7 @@ namespace AbnfToAntlr.Common
         protected override void VisitRuleList(ITree node)
         {
             // Start over each time the rule list is visited
-            CommonConstructor();
+            Reset();
 
             VisitChildren(node);
         }
@@ -92,7 +94,18 @@ namespace AbnfToAntlr.Common
 
         protected override void VisitProseVal(ITree node)
         {
-            AddCharValNode(node);
+            var proseVal = GetProseVal(node);
+
+            var proseValAsRuleName = proseVal.ToLowerInvariant();
+
+            if (_ruleStatistics.LhsRawRuleNames.Contains(proseVal))
+            {
+                // do nothing, treat proseVal as a rule name
+            }
+            else
+            {
+                AddCharValNode(node);
+            }
         }
 
         /// <summary>
@@ -100,19 +113,23 @@ namespace AbnfToAntlr.Common
         /// </summary>
         void AddCharValNode(ITree node)
         {
-            string text;
-            var char_val = node.GetChild(0);
-
-            text = char_val.Text;
-            text = text.Substring(1, text.Length - 2);
+            var isCaseSensitive = IsCaseSensitive(node);
+            var text = GetStringValue(node);
 
             foreach (char character in text)
             {
-                var upperCharacter = char.ToUpperInvariant(character);
-                var lowerCharacter = char.ToLowerInvariant(character);
+                if (isCaseSensitive)
+                {
+                    AddToDistinctCharacters(character);
+                }
+                else
+                {
+                    var upperCharacter = char.ToUpperInvariant(character);
+                    var lowerCharacter = char.ToLowerInvariant(character);
 
-                AddToDistinctCharacters(upperCharacter);
-                AddToDistinctCharacters(lowerCharacter);
+                    AddToDistinctCharacters(upperCharacter);
+                    AddToDistinctCharacters(lowerCharacter);
+                }
             }
         }
 
@@ -165,8 +182,8 @@ namespace AbnfToAntlr.Common
         /// </summary>
         void AddValueRangeNode(ITree node)
         {
-            var min = node.GetChild(0);
-            var max = node.GetChild(1);
+            var min = node.GetChildWithValidation(0);
+            var max = node.GetChildWithValidation(1);
 
             int minValue = GetValue(min);
             int maxValue = GetValue(max);

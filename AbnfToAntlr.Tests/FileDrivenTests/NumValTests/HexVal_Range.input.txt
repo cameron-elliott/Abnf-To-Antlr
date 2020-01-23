@@ -1,0 +1,3 @@
+hex-val-range = %x49-4B ;equivalent to (%s"I" / %s"J" / %s"K")
+
+hex-val-range-2 = %X49-4B ;equivalent to (%s"I" / %s"J" / %s"K")

@@ -1,6 +1,6 @@
 ﻿/*
 
-    Copyright 2012-2018 Robert Pinchbeck
+    Copyright 2012-2020 Robert Pinchbeck
   
     This file is part of AbnfToAntlr.
 
@@ -37,8 +37,8 @@ namespace AbnfToAntlr.Common
     {
         Dictionary<char, NamedCharacter> _distinctCharacters;
 
-        public TreeVisitor_OutputTranslation_Indirect(ITokenStream tokens, System.IO.TextWriter writer, Dictionary<char, NamedCharacter> distinctCharacters, INamedCharacterLookup lookup)
-            : base(tokens, writer, lookup)
+        public TreeVisitor_OutputTranslation_Indirect(ITokenStream tokens, System.IO.TextWriter writer, INamedCharacterLookup lookup, RuleStatistics ruleStatistics, Dictionary<char, NamedCharacter> distinctCharacters)
+            : base(tokens, writer, lookup, ruleStatistics)
         {
             _distinctCharacters = distinctCharacters;
         }
@@ -48,11 +48,8 @@ namespace AbnfToAntlr.Common
         /// </summary>
         protected override void WriteCharValNode(ITree node)
         {
-            string text;
-            var char_val = node.GetChild(0);
-
-            text = char_val.Text;
-            text = text.Substring(1, text.Length - 2);
+            var isCaseSensitive = IsCaseSensitive(node);
+            var text = GetStringValue(node);
 
             var length = text.Length;
 
@@ -74,17 +71,25 @@ namespace AbnfToAntlr.Common
                 var namedUpperCharacter = _lookup.GetNamedCharacter(upperCharacter);
                 var namedLowerCharacter = _lookup.GetNamedCharacter(lowerCharacter);
 
-                if (upperCharacter == lowerCharacter)
+                if (isCaseSensitive)
                 {
-                    Write(namedUpperCharacter.Name);
+                    var namedCharacter = _lookup.GetNamedCharacter(text[index]);
+                    Write(namedCharacter.Name);
                 }
                 else
                 {
-                    Write("(");
-                    Write(namedUpperCharacter.Name);
-                    Write(" | ");
-                    Write(namedLowerCharacter.Name);
-                    Write(")");
+                    if (upperCharacter == lowerCharacter)
+                    {
+                        Write(namedLowerCharacter.Name);
+                    }
+                    else
+                    {
+                        Write("(");
+                        Write(namedUpperCharacter.Name);
+                        Write(" | ");
+                        Write(namedLowerCharacter.Name);
+                        Write(")");
+                    }
                 }
             }
 
@@ -100,8 +105,8 @@ namespace AbnfToAntlr.Common
         /// </summary>
         protected override void WriteValueRangeNode(ITree node)
         {
-            var minValue = GetValue(node.GetChild(0));
-            var maxValue = GetValue(node.GetChild(1));
+            var minValue = GetValue(node.GetChildWithValidation(0));
+            var maxValue = GetValue(node.GetChildWithValidation(1));
 
             if (maxValue > minValue)
             {
@@ -134,6 +139,10 @@ namespace AbnfToAntlr.Common
             Write(namedCharacter.Name);
         }
 
+        protected override string GetLexerRuleName(string alias)
+        {
+            return alias;
+        }
 
     } // class
 } // namespace

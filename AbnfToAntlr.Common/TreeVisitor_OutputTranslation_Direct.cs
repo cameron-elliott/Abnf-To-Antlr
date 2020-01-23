@@ -1,6 +1,6 @@
 ﻿/*
 
-    Copyright 2012-2018 Robert Pinchbeck
+    Copyright 2012-2020 Robert Pinchbeck
   
     This file is part of AbnfToAntlr.
 
@@ -34,22 +34,17 @@ namespace AbnfToAntlr.Common
     /// </summary>
     public class TreeVisitor_OutputTranslation_Direct : TreeVisitor_OutputTranslation
     {
-        protected List<string> _lexerRules;
-
-        public TreeVisitor_OutputTranslation_Direct(ITokenStream tokens, System.IO.TextWriter writer, INamedCharacterLookup lookup)
-            : base(tokens, writer, lookup)
+        public TreeVisitor_OutputTranslation_Direct(ITokenStream tokens, System.IO.TextWriter writer, INamedCharacterLookup lookup, RuleStatistics ruleStatistics)
+            : base(tokens, writer, lookup, ruleStatistics)
         {
         }
 
         /// <summary>
-        /// Preprocess rules list: determine unique rule names for all rules, determine which rules are lexer rules
+        /// Output the ANTLR translation of the specified rule list
         /// </summary>
         protected override void VisitRuleList(ITree node)
         {
-            CommonConstructor();
-
-            CreateRuleNamesCollection(node);
-            CreateLexerRulesCollection(node);
+            Reset();
 
             VisitChildren(node);
         }
@@ -59,57 +54,62 @@ namespace AbnfToAntlr.Common
         /// </summary>
         protected override void WriteCharValNode(ITree node)
         {
-            string text;
-            var char_val = node.GetChild(0);
-
-            text = char_val.Text;
-            text = text.Substring(1, text.Length - 2);
-            text = text.Replace(@"\", @"\\"); // escape forwardslashes (order matters, this must be done before escaping anything else)
-            text = text.Replace(@"'", @"\'"); // escape apostrophes
+            var isCaseSensitive = IsCaseSensitive(node);
+            var text = GetStringValue(node);
 
             var length = text.Length;
 
-            if (length > 1)
+            if (isCaseSensitive && length > 0)
             {
-                Write("(");
+                Write("'");
+                Write(text);
+                Write("'");
             }
-            for (int index = 0; index < length; index++)
+            else
             {
-                if (index > 0)
-                {
-                    Write(" ");
-                }
-
-                var upperCharacter = char.ToUpperInvariant(text[index]);
-                var lowerCharacter = char.ToLowerInvariant(text[index]);
-
-                if (upperCharacter == lowerCharacter)
-                {
-                    Write("'");
-                    Write(upperCharacter.ToString());
-                    Write("'");
-                }
-                else
+                if (length > 1)
                 {
                     Write("(");
+                }
 
-                    Write("'");
-                    Write(upperCharacter.ToString());
-                    Write("'");
+                for (int index = 0; index < length; index++)
+                {
+                    if (index > 0)
+                    {
+                        Write(" ");
+                    }
 
-                    Write(" | ");
+                    var upperCharacter = char.ToUpperInvariant(text[index]);
+                    var lowerCharacter = char.ToLowerInvariant(text[index]);
 
-                    Write("'");
-                    Write(lowerCharacter.ToString());
-                    Write("'");
+                    if (upperCharacter == lowerCharacter)
+                    {
+                        Write("'");
+                        Write(AntlrHelper.CharEscape(lowerCharacter));
+                        Write("'");
+                    }
+                    else
+                    {
+                        Write("(");
 
+                        Write("'");
+                        Write(AntlrHelper.CharEscape(upperCharacter));
+                        Write("'");
+
+                        Write(" | ");
+
+                        Write("'");
+                        Write(AntlrHelper.CharEscape(lowerCharacter));
+                        Write("'");
+
+                        Write(")");
+                    }
+                }
+
+                if (length > 1)
+                {
                     Write(")");
                 }
-            }
-
-            if (length > 1)
-            {
-                Write(")");
             }
         }
 
@@ -118,8 +118,8 @@ namespace AbnfToAntlr.Common
         /// </summary>
         protected override void WriteValueRangeNode(ITree node)
         {
-            var min = node.GetChild(0);
-            var max = node.GetChild(1);
+            var min = node.GetChildWithValidation(0);
+            var max = node.GetChildWithValidation(1);
 
             Visit(min);
             Write("..");
@@ -134,103 +134,10 @@ namespace AbnfToAntlr.Common
             Write(string.Format(@"'\u{0:X4}'", value));
         }
 
-        /// <summary>
-        /// Scan the specified tree for rules that contain only literals
-        /// </summary>
-        protected void CreateLexerRulesCollection(ITree ruleListNode)
+        protected override string GetLexerRuleName(string alias)
         {
-            string ruleName;
-            ITree ruleNode;
-
-            _lexerRules = new List<string>();
-
-            for (int index = 0; index < ruleListNode.ChildCount; index++)
-            {
-                ruleNode = ruleListNode.GetChild(index);
-
-                if (ruleNode.Type != AbnfAstParser.RULE_NODE)
-                {
-                    throw new InvalidOperationException("Unexpected node type encountered while searching for lexer rules.");
-                }
-
-                ruleName = GetChildrenText(ruleNode.GetChild(0));
-
-                if (ContainsRuleName(ruleNode))
-                {
-                    // do nothing
-                }
-                else
-                {
-                    _lexerRules.Add(ruleName);
-                }
-            }
+            return alias.ToUpperInvariant();
         }
 
-        /// <summary>
-        /// Determine if the specified node contains any rule name nodes
-        /// </summary>
-        /// <returns>true if the specified node contains a rule name node, false otherwise</returns>
-        protected bool ContainsRuleName(ITree node)
-        {
-            int minIndex;
-            ITree child;
-
-            if (node.Type == AbnfAstParser.RULE_NODE)
-            {
-                minIndex = 1;
-            }
-            else
-            {
-                minIndex = 0;
-            }
-
-            if (node.Type == AbnfAstParser.RULE_NAME_NODE)
-            {
-                return true;
-            }
-
-            for (int index = minIndex; index < node.ChildCount; index++)
-            {
-                child = node.GetChild(index);
-
-                if (ContainsRuleName(child))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Determine if the specified rule name is a lexer rule
-        /// </summary>
-        /// <returns>true if the specified rule is a lexer rule, false otherwise</returns>
-        protected bool IsLexerRule(string ruleName)
-        {
-            if (_lexerRules.Contains(ruleName))
-            {
-                return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Post-processing of mapped rule names
-        /// </summary>
-        protected override string ProcessMappedRuleName(string ruleNameText, string mappedText)
-        {
-            string result = mappedText;
-
-            if (IsLexerRule(ruleNameText))
-            {
-                // capitalize the entire rule name of lexer rules 
-                result = mappedText.ToUpperInvariant();
-            }
-
-            return result;
-        }
-
-    } // class
-} // namespace
+    }
+}

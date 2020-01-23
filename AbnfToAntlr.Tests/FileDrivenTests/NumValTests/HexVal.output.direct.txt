@@ -1,0 +1,3 @@
+HEX_VAL : '\u004B'; //equivalent to (%s"K")
+
+HEX_VAL_2 : '\u004B'; //equivalent to (%s"K")
